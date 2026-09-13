@@ -6,21 +6,21 @@ def clean_file(filepath):
 
     df = pd.read_excel(filepath, header=[2,3])
 
-    df.columns = ["no", "ticker", "nama_emiten", "sekuritas", "nama_pemegang_saham",
-                "nama_rekening", "alamat", "alamat_lanjutan", "kebangsaan", "domisili",
-                "status_lokal_asing", "saham_02jul", "saham_gabungan_02jul", "pct_02jul",
-                "saham_03jul", "saham_gabungan_03jul", "pct_03jul", "perubahan"]
+    df.columns = ["no", "ticker", "company_name", "custodian", "holder_name",
+                "account_name", "address", "address_continued", "nationality", "domicile",
+                "status_local_foreign", "shares_02jul", "combined_shares_02jul", "pct_02jul",
+                "shares_03jul", "combined_shares_03jul", "pct_03jul", "change"]
 
     df = df.dropna(axis='index', how='any', subset='ticker')
 
-    df['nama_emiten'] = df['nama_emiten'].ffill()
-    df['nama_pemegang_saham'] = df['nama_pemegang_saham'].ffill()
+    df['company_name'] = df['company_name'].ffill()
+    df['holder_name'] = df['holder_name'].ffill()
     df['no'] = df['no'].ffill()
 
-    df.loc[df['kebangsaan'].isna() & (df['domisili'].str.upper() == 'INDONESIA'), 'kebangsaan'] = 'INDONESIAN'
+    df.loc[df['nationality'].isna() & (df['domicile'].str.upper() == 'INDONESIA'), 'nationality'] = 'INDONESIAN'
 
-    df['saham_gabungan_02jul'] = df['saham_gabungan_02jul'].ffill()
-    df['saham_gabungan_03jul'] = df['saham_gabungan_03jul'].ffill()
+    df['combined_shares_02jul'] = df['combined_shares_02jul'].ffill()
+    df['combined_shares_03jul'] = df['combined_shares_03jul'].ffill()
     df['pct_02jul'] = df['pct_02jul'].ffill()
     df['pct_03jul'] = df['pct_03jul'].ffill()
 
@@ -36,11 +36,11 @@ def clean_file(filepath):
             new_value = value[:last_comma] + '.' + after
         return float(new_value)
 
-    for col in ['saham_02jul','saham_gabungan_02jul','pct_02jul',
-                'saham_03jul','saham_gabungan_03jul','pct_03jul','perubahan']:
+    for col in ['shares_02jul','combined_shares_02jul','pct_02jul',
+                'shares_03jul','combined_shares_03jul','pct_03jul','change']:
         df[col] = df[col].replace('-', '0')
 
-    for col in ['saham_02jul','saham_gabungan_02jul','saham_03jul','saham_gabungan_03jul']:
+    for col in ['shares_02jul','combined_shares_02jul','shares_03jul','combined_shares_03jul']:
         df[col] = df[col].apply(clean_number)
 
     return df

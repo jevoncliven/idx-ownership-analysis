@@ -9,7 +9,7 @@ load_dotenv()
 df = clean_file('../data/idx_5pct.xlsx')
 
 #get unique ticker/company name pairs
-unique_stocks = df[['ticker', 'nama_emiten']].drop_duplicates(subset='ticker')
+unique_stocks = df[['ticker', 'company_name']].drop_duplicates(subset='ticker')
     
 try:                                        
     with psycopg2.connect(
@@ -24,12 +24,12 @@ try:
                 
                 cur.execute(
                     """INSERT INTO stocks (ticker, company_name) VALUES (%s, %s) ON CONFLICT (ticker) DO NOTHING""", 
-                    (row['ticker'], row['nama_emiten'])
+                    (row['ticker'], row['company_name'])
                 )
 
         conn.commit()
             
-    print('Stocks loaded.')
+    print(f"Stocks loaded. {len(unique_stocks)} tickers processed.")
 
 except Exception as error:
     print(error)
