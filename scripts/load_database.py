@@ -72,15 +72,3 @@ def load_ownership_data(df, conn, previous_date, latest_date):
                 )
                 
             print(f"Finished {latest_date} loop")
-
-def main(filepath):
-    previous_date, latest_date = detect_dates(filepath)
-    print(f"Detected dates: {previous_date}, {latest_date}")
-
-    conn = get_connection()
-    df = clean_file(filepath)
-    register_new_stocks(df, conn)
-    load_ownership_data(df, conn, previous_date, latest_date)
-    
-if __name__ == "__main__":
-    main("../data/idx_15sept.xlsx")
