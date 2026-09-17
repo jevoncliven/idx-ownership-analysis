@@ -1,7 +1,7 @@
 import psycopg2
 import os
 from dotenv import load_dotenv
-from clean_ksei import clean_file
+from clean_ksei import clean_file, detect_dates
 
 load_dotenv()
 
@@ -19,7 +19,7 @@ def get_connection():
 def register_new_stocks(df, conn):
     unique_stocks = df[['ticker', 'company_name']].drop_duplicates(subset='ticker')
 
-    with conn as conn:
+    with conn:
         with conn.cursor() as cur:
             for index, row in unique_stocks.iterrows():
                 
@@ -32,13 +32,13 @@ def register_new_stocks(df, conn):
             
     print(f"Stocks loaded. {len(unique_stocks)} tickers processed.")
 
-#used to insert 5% changes' data to database
-def load_ownership_data(df, conn, date1, date2):
-    with conn as conn:
+#used to insert 5% ownership changes' data to database
+def load_ownership_data(df, conn, previous_date, latest_date):
+    with conn:
         with conn.cursor() as cur:
             print("Starting insert loop...")
 
-            #Insert 02-Jul data
+            #Insert previous snapshot
             for index, row in df.iterrows():
                 cur.execute(
                     """INSERT INTO ownership_snapshots
@@ -49,13 +49,13 @@ def load_ownership_data(df, conn, date1, date2):
                     (
                         row['ticker'], row['holder_name'], row['custodian'], row['account_name'], 
                         row['nationality'], row['domicile'], row['status_local_foreign'], 
-                        row['shares_02jul'], row['combined_shares_02jul'], 
-                        row['pct_02jul'], date1
+                        row['shares_prev'], row['combined_shares_prev'], 
+                        row['pct_prev'], previous_date
                     )
                 )
-            print("Finished 02-Jul loop")
+            print(f"Finished {previous_date} loop")
 
-            #Insert 03-Jul data
+            #Insert latest snapshot
             for index, row in df.iterrows():
                 cur.execute(
                     """INSERT INTO ownership_snapshots
@@ -66,17 +66,21 @@ def load_ownership_data(df, conn, date1, date2):
                     (
                         row['ticker'], row['holder_name'], row['custodian'], row['account_name'], 
                         row['nationality'], row['domicile'], row['status_local_foreign'], 
-                        row['shares_03jul'], row['combined_shares_03jul'], 
-                        row['pct_03jul'], date2
+                        row['shares_latest'], row['combined_shares_latest'], 
+                        row['pct_latest'], latest_date
                     )
                 )
-            print("Finished 03-Jul loop")
+                
+            print(f"Finished {latest_date} loop")
 
-def main(filepath, date1, date2):
+def main(filepath):
+    previous_date, latest_date = detect_dates(filepath)
+    print(f"Detected dates: {previous_date}, {latest_date}")
+
     conn = get_connection()
     df = clean_file(filepath)
     register_new_stocks(df, conn)
-    load_ownership_data(df, conn, date1, date2)
+    load_ownership_data(df, conn, previous_date, latest_date)
     
 if __name__ == "__main__":
-    main("../data/idx_5pct.xlsx", "2026-07-02", "2026-07-03")
+    main("../data/idx_15sept.xlsx")

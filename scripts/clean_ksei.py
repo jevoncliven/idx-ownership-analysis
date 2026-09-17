@@ -1,15 +1,37 @@
 import pandas as pd
 import numpy as np
 
+def detect_dates(filepath):
+    df = pd.read_excel(filepath, header=[2,3])
+
+    #get non-duplicate dates 
+    dates = (
+        pd.Series(df.columns.get_level_values(0))
+        .str.extract(r'(\d{2}-[A-Z]{3}-\d{4})')[0]
+        .dropna()
+        .drop_duplicates()
+    )
+
+    #change format to YY-MM-DD
+    dates = pd.to_datetime(dates, format='%d-%b-%Y').dt.date
+
+    #sort date from earliest to latest
+    dates = dates.sort_values().reset_index(drop=True)
+    previous_date = dates.iloc[0]
+    latest_date = dates.iloc[1]
+
+    return previous_date, latest_date
+    
+
 #to turn a messy Excel file into a clean, structured DataFrame
 def clean_file(filepath):
 
     df = pd.read_excel(filepath, header=[2,3])
 
-    df.columns = ["no", "ticker", "company_name", "custodian", "holder_name",
-                "account_name", "address", "address_continued", "nationality", "domicile",
-                "status_local_foreign", "shares_02jul", "combined_shares_02jul", "pct_02jul",
-                "shares_03jul", "combined_shares_03jul", "pct_03jul", "change"]
+    df.columns = ['no', 'ticker', 'company_name', 'custodian', 'holder_name',
+                'account_name', 'address', 'address_continued', 'nationality', 'domicile',
+                'status_local_foreign', 'shares_prev', 'combined_shares_prev', 'pct_prev',
+                'shares_latest', 'combined_shares_latest', 'pct_latest', 'change']
 
     df = df.dropna(axis='index', how='any', subset='ticker')
 
@@ -19,10 +41,10 @@ def clean_file(filepath):
 
     df.loc[df['nationality'].isna() & (df['domicile'].str.upper() == 'INDONESIA'), 'nationality'] = 'INDONESIAN'
 
-    df['combined_shares_02jul'] = df['combined_shares_02jul'].ffill()
-    df['combined_shares_03jul'] = df['combined_shares_03jul'].ffill()
-    df['pct_02jul'] = df['pct_02jul'].ffill()
-    df['pct_03jul'] = df['pct_03jul'].ffill()
+    df['combined_shares_prev'] = df['combined_shares_prev'].ffill()
+    df['combined_shares_latest'] = df['combined_shares_latest'].ffill()
+    df['pct_prev'] = df['pct_prev'].ffill()
+    df['pct_latest'] = df['pct_latest'].ffill()
 
     def clean_number(value):
         value = str(value)
@@ -36,11 +58,11 @@ def clean_file(filepath):
             new_value = value[:last_comma] + '.' + after
         return float(new_value)
 
-    for col in ['shares_02jul','combined_shares_02jul','pct_02jul',
-                'shares_03jul','combined_shares_03jul','pct_03jul','change']:
+    for col in ['shares_prev','combined_shares_prev','pct_prev',
+                'shares_latest','combined_shares_latest','pct_latest','change']:
         df[col] = df[col].replace('-', '0')
 
-    for col in ['shares_02jul','combined_shares_02jul','shares_03jul','combined_shares_03jul']:
+    for col in ['shares_prev','combined_shares_prev','shares_latest','combined_shares_latest']:
         df[col] = df[col].apply(clean_number)
 
     return df
