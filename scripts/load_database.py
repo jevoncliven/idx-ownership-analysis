@@ -32,43 +32,60 @@ def register_new_stocks(df, conn):
             
     print(f"Stocks loaded. {len(unique_stocks)} tickers processed.")
 
+def date_already_loaded(conn, snapshot_date):
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) FROM ownership_snapshots WHERE snapshot_date = %s",
+            (snapshot_date,)
+        )
+        count = cur.fetchone()[0]
+    return count > 0
+
 #used to insert 5% ownership changes' data to database
 def load_ownership_data(df, conn, previous_date, latest_date):
     with conn:
         with conn.cursor() as cur:
-            print("Starting insert loop...")
+            if date_already_loaded(conn, previous_date):
+                print(f"{previous_date} already loaded, skipping.")
+            else:
+            # existing insert loop for previous_date
 
-            #Insert previous snapshot
-            for index, row in df.iterrows():
-                cur.execute(
-                    """INSERT INTO ownership_snapshots
-                    (ticker, holder_name, custodian, account_name, nationality, 
-                    domicile, status_local_foreign, shares_held, 
-                    combined_shares_per_investor, ownership_pct, snapshot_date)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                    (
-                        row['ticker'], row['holder_name'], row['custodian'], row['account_name'], 
-                        row['nationality'], row['domicile'], row['status_local_foreign'], 
-                        row['shares_prev'], row['combined_shares_prev'], 
-                        row['pct_prev'], previous_date
+                #Insert previous snapshot
+                for index, row in df.iterrows():
+                    cur.execute(
+                        """INSERT INTO ownership_snapshots
+                        (ticker, holder_name, custodian, account_name, nationality, 
+                        domicile, status_local_foreign, shares_held, 
+                        combined_shares_per_investor, ownership_pct, snapshot_date)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (
+                            row['ticker'], row['holder_name'], row['custodian'], row['account_name'], 
+                            row['nationality'], row['domicile'], row['status_local_foreign'], 
+                            row['shares_prev'], row['combined_shares_prev'], 
+                            row['pct_prev'], previous_date
+                        )
                     )
-                )
-            print(f"Finished {previous_date} loop")
+                print(f"Finished {previous_date} loop")
 
-            #Insert latest snapshot
-            for index, row in df.iterrows():
-                cur.execute(
-                    """INSERT INTO ownership_snapshots
-                    (ticker, holder_name, custodian, account_name, nationality, 
-                    domicile, status_local_foreign, shares_held, 
-                    combined_shares_per_investor, ownership_pct, snapshot_date)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) """,
-                    (
-                        row['ticker'], row['holder_name'], row['custodian'], row['account_name'], 
-                        row['nationality'], row['domicile'], row['status_local_foreign'], 
-                        row['shares_latest'], row['combined_shares_latest'], 
-                        row['pct_latest'], latest_date
+            if date_already_loaded(conn, latest_date):
+                print(f"{latest_date} already loaded, skipping.")
+            else:
+                # existing insert loop for previous_date
+
+                #Insert latest snapshot
+                for index, row in df.iterrows():
+                    cur.execute(
+                        """INSERT INTO ownership_snapshots
+                        (ticker, holder_name, custodian, account_name, nationality, 
+                        domicile, status_local_foreign, shares_held, 
+                        combined_shares_per_investor, ownership_pct, snapshot_date)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) """,
+                        (
+                            row['ticker'], row['holder_name'], row['custodian'], row['account_name'], 
+                            row['nationality'], row['domicile'], row['status_local_foreign'], 
+                            row['shares_latest'], row['combined_shares_latest'], 
+                            row['pct_latest'], latest_date
+                        )
                     )
-                )
-                
-            print(f"Finished {latest_date} loop")
+                    
+                print(f"Finished {latest_date} loop")
