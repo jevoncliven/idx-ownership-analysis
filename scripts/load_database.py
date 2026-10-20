@@ -1,7 +1,7 @@
 import psycopg2
 import os
 from dotenv import load_dotenv
-from clean_ksei import clean_file, detect_dates
+import pandas as pd
 
 load_dotenv()
 
@@ -89,3 +89,32 @@ def load_ownership_data(df, conn, previous_date, latest_date):
                     )
                     
                 print(f"Finished {latest_date} loop")
+
+#used to retrieve ownership changes' data (optional)
+def get_changes(conn):
+    query = """
+        WITH holder_sum AS (
+            SELECT ticker, holder_name, snapshot_date, SUM(shares_held) AS total_share_held
+            FROM ownership_snapshots
+            GROUP BY ticker, holder_name, snapshot_date
+        ),
+        holder_lag AS (
+            SELECT ticker, holder_name, snapshot_date, total_share_held,
+                LAG(total_share_held) OVER (
+                    PARTITION BY ticker, holder_name ORDER BY snapshot_date
+                ) AS previous_day_share_held
+            FROM holder_sum
+        )
+        SELECT ticker, holder_name, snapshot_date, total_share_held, previous_day_share_held,
+            total_share_held - previous_day_share_held AS share_change
+        FROM holder_lag
+        WHERE total_share_held != previous_day_share_held
+        ORDER BY ticker;
+        -- ORDER BY ABS(total_share_held - previous_day_share_held) DESC;
+    """
+    with conn.cursor() as cur:
+        cur.execute(query)
+        results = cur.fetchall()
+        columns = [desc[0] for desc in cur.description]  # extract column names
+    
+    return pd.DataFrame(results, columns=columns)
