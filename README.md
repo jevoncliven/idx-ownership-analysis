@@ -1,107 +1,74 @@
 # IDX 5% Ownership Analysis
 
-
-## Overview
-The purpose of this project is to filter and analyze changes in shareholdings among shareholders who hold 5% or more of a company's shares.
-Understanding significant shareholder movements can help investors identify changes in ownership structure and potential shifts in corporate control.
-
+A Python and PostgreSQL project for analyzing changes in shareholdings among shareholders who own 5% or more of companies listed on the Indonesia Stock Exchange (IDX).
 
 ## Data Source
-The data is sourced from the official Indonesia Stock Exchange (IDX) website:
-https://www.idx.co.id/id/perusahaan-tercatat/data-kepemilikan-saham/
 
-The data is updated daily from Monday to Friday, excluding non-operational days.
+Data is sourced from the official Indonesia Stock Exchange (IDX) website:
 
+[IDX Share Ownership Data](https://www.idx.co.id/id/perusahaan-tercatat/data-kepemilikan-saham/)
+
+## Pipeline
+
+1. `clean_ksei.py` cleans raw Excel files and converts ownership data into a long format.
+2. `load_database.py` registers new tickers and loads ownership records into PostgreSQL. Loading skips snapshot dates already in the database, making the process safe to rerun.
+3. `main.py` processes every matching file in `data/` in a single run. Each file is processed independently: if a file fails, only that file's transaction is rolled back. The pipeline then reports a summary of successfully loaded and failed files.
 
 ## Schema Design
 
-Three tables:
-- `stocks` — 833 real IDX tickers and company names
-- `sectors` — industry groupings (created for future use; not currently
-  populated, since sector classification wasn't available in this data source)
-- `ownership_snapshots` — 6,146 rows, one per shareholder-account holding
-  per snapshot date
+The database consists of three tables:
 
+- `stocks` — stores IDX tickers and company names.
+- `sectors` — stores industry groupings for future use.
+- `ownership_snapshots` — stores shareholder-account holdings and ownership percentages for each snapshot date.
 
-### Key design decisions
+### Key Design Decisions
 
 **Long format over wide format.**
-The raw file stores each snapshot date as its own set of columns
-(`saham_02jul`, `saham_03jul`, etc.). This was reshaped into long format —
-one row per (holder, date), with a single `snapshot_date` column — so that
-adding a new month's data later only requires inserting new rows, not
-altering the table structure or rewriting existing queries.
 
-**Surrogate key instead of a natural composite key.**
-`(ticker, holder_name)` looked unique at first, but investors often hold
-the same stock through multiple broker accounts, so that combination
-wasn't. Adding `(custodian, account_name)` narrowed it further, but a
-small number of rows (~85) still had identical values across every
-descriptive column, just different share counts — likely unlabeled
-sub-accounts the source data doesn't distinguish. Since no combination of
-real columns was reliably unique, `ownership_snapshots` uses a `SERIAL`
-surrogate key instead of forcing a natural key the data doesn't support.
+The raw files contain a separate set of columns for each snapshot date. Reshaping the data into one row per holder and snapshot date means that new snapshots only add rows, without requiring schema changes or rewritten queries.
+
+**Surrogate key instead of a natural key.**
+
+Investors may hold shares through multiple broker accounts, and the source data does not always provide enough information to uniquely identify each record. Therefore, `ownership_snapshots` uses a `SERIAL` primary key instead of relying on a natural key.
 
 **Granular storage, aggregation via query.**
-The table stores raw per-account holdings rather than pre-computed totals
-or percentage changes. Metrics like total ownership per investor or
-period-over-period change are computed at query time with SQL (`GROUP BY`
-+ `SUM`, and `LAG()` window functions), so the same stored data can answer
-multiple questions without needing to be reshaped or recomputed.
+
+Raw per-account holdings are stored in the database. Ownership totals and period-over-period changes are calculated at query time using SQL aggregation (`GROUP BY`, `SUM`) and window functions (`LAG()`).
 
 ## Setup
-1. Create a PostgreSQL database
-2. Run the schema files in order:
-   - `schema/01_schema.sql` — creates the 3 tables
-   - `schema/02_stocks.sql` — inserts all 833 tickers
-   - `schema/03_ownership.sql` — inserts the 6,146 ownership rows
-3. Run queries from the `queries/` folder against the loaded database
+
+1. Create a PostgreSQL database and run `schema/01_schema.sql`.
+2. Create a `.env` file containing your database credentials (see `.env.example`).
+3. Install the required Python dependencies:
+
+   ```bash
+   pip install pandas openpyxl psycopg2-binary python-dotenv
+   ```
+
+4. Place the disclosure files in `data/`.
+5. Run the pipeline:
+
+   ```bash
+   cd scripts && python main.py
+   ```
 
 ## Example Query
-`queries/01_ownership_changes.sql` — identifies which investors
-significantly changed their stake in a stock between the two snapshot
-dates, computed via a `LAG()` window function rather than relying on a
-static "change" column. Works automatically as more snapshot dates are
-added over time.
+
+`queries/01_ownership_changes.sql` identifies investors whose ownership stakes have changed significantly between snapshot dates. It uses the `LAG()` window function to compare ownership across periods rather than relying on a static change column.
+
+The results update automatically as new snapshots are loaded into the database.
+
+## Known Limitations
+
+- Files must follow the `peng-...-lima-persen.xlsx` naming pattern to be processed.
+- The pipeline currently runs manually; automated scheduling is planned for a future extension.
 
 ## Tools Used
-PostgreSQL, Python (pandas) for data cleaning, pgAdmin for query
-development.
 
-<!-- 
-# IDX Ownership Change Analyzer
-
-Analyzes shareholder ownership changes in IDX-listed companies using
-real KSEI (Kustodian Sentral Efek Indonesia) shareholder disclosure data.
-
-## Data
-Real KSEI shareholder balance report, two snapshot dates (2–3 Jul 2026),
-833 companies, ~6,100 shareholder-account holdings. Raw file uses merged
-headers and Indonesian-format numbers, handled in `scripts/clean_ksei.py`.
-
-## Schema
-- `stocks` — tickers and company names
-- `sectors` — created for future use, not currently populated
-- `ownership_snapshots` — one row per shareholder-account per snapshot
-  date (long format, not one column per date)
-
-**Design notes:**
-- Long format so new snapshot dates just mean new rows, not schema changes
-- No natural key held up as unique (investors hold via multiple broker
-  sub-accounts), so `ownership_snapshots` uses a surrogate `SERIAL` key
-- Raw per-account data is stored; totals and changes are computed via
-  SQL (`GROUP BY`, `LAG()`) rather than pre-calculated
-
-## Setup
-1. Create a Postgres database, run `schema/01_schema.sql`
-2. Add a `.env` file (see `.env.example`)
-3. `pip install pandas openpyxl psycopg2-binary python-dotenv`
-4. `cd scripts && python pipeline.py`
-
-## Example Query
-`queries/01_ownership_changes.sql` — investors whose stake changed
-between snapshot dates, via `LAG()` instead of a static "change" column.
-
-## Known limitations
-- Snapshot dates are hardcoded in `pipeline.py`, not auto-detected yet
-- Re-running the pipeline on the same file duplicates rows (no dedup check) -->
+- **Python** — data processing and pipeline orchestration.
+- **pandas** — data cleaning and transformation.
+- **openpyxl** — Excel file handling.
+- **PostgreSQL** — relational database for storing ownership records.
+- **psycopg2** — Python–PostgreSQL connectivity.
+- **pgAdmin** — database management and administration.
